@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { MessageService } from '@/lib/services/message.service'
 import { StorageService } from '@/lib/services/storage.service'
-import { WebhookPayload, MessageType } from '@/lib/types/database'
+import { UazapiWebhookPayload, MessageType } from '@/lib/types/database'
 import { createAdminClient } from '@/lib/supabase/admin'
+
+// Map UAZAPI message types to our MessageType
+function mapMessageType(uazapiType: string, mediaType?: string): MessageType {
+  if (mediaType === 'ptt' || uazapiType === 'AudioMessage') return 'audio'
+  if (uazapiType === 'ImageMessage') return 'image'
+  if (uazapiType === 'VideoMessage') return 'video'
+  if (uazapiType === 'DocumentMessage') return 'document'
+  return 'text'
+}
 
 /**
  * Webhook endpoint to receive messages from UAZAPI
@@ -13,17 +22,25 @@ export async function POST(request: NextRequest) {
   console.log('[WEBHOOK] Headers:', Object.fromEntries(request.headers))
 
   try {
-    const payload: WebhookPayload = await request.json()
+    const payload: UazapiWebhookPayload = await request.json()
 
     console.log('[WEBHOOK] Payload:', JSON.stringify(payload, null, 2))
 
-    // Validate payload
-    if (!payload.from || !payload.type) {
-      console.log('[WEBHOOK] Invalid payload - missing from or type')
+    // Validate UAZAPI payload structure
+    if (!payload.body || !payload.body.message || !payload.body.chat) {
+      console.log('[WEBHOOK] Invalid payload - missing body structure')
       return NextResponse.json(
         { error: 'Invalid payload: missing required fields' },
         { status: 400 }
       )
+    }
+
+    const { message, chat } = payload.body
+
+    // Ignore messages sent by us (fromMe: true)
+    if (message.fromMe) {
+      console.log('[WEBHOOK] Ignoring message sent by us')
+      return NextResponse.json({ success: true, ignored: true })
     }
 
     // Create admin client for webhook operations (bypasses RLS)
@@ -31,12 +48,16 @@ export async function POST(request: NextRequest) {
     console.log('[WEBHOOK] Admin client created')
 
     // Extract phone number (remove @s.whatsapp.net if present)
-    const phoneNumber = payload.from.replace('@s.whatsapp.net', '')
+    const phoneNumber = message.chatid.replace('@s.whatsapp.net', '')
     console.log('[WEBHOOK] Phone number:', phoneNumber)
+
+    // Get contact name
+    const contactName = chat.wa_contactName || chat.name || null
+    console.log('[WEBHOOK] Contact name:', contactName)
 
     // Find or create contact
     console.log('[WEBHOOK] Finding/creating contact...')
-    const contact = await MessageService.findOrCreateContact(phoneNumber, undefined, adminClient)
+    const contact = await MessageService.findOrCreateContact(phoneNumber, contactName, adminClient)
     console.log('[WEBHOOK] Contact:', contact.id)
 
     // Find or create conversation
@@ -44,42 +65,52 @@ export async function POST(request: NextRequest) {
     const conversation = await MessageService.findOrCreateConversation(contact.id, adminClient)
     console.log('[WEBHOOK] Conversation:', conversation.id)
 
+    // Map message type
+    const messageType = mapMessageType(message.messageType, message.mediaType)
+    console.log('[WEBHOOK] Message type:', messageType)
+
     // Process media if exists
     let mediaUrl: string | undefined
-    if (payload.media && payload.type !== 'text') {
+    let apiFileUrl: string | undefined
+
+    if (message.content?.URL) {
+      apiFileUrl = message.content.URL
+      console.log('[WEBHOOK] Media URL from API:', apiFileUrl)
+
       try {
         // Download media from UAZAPI and upload to our storage
-        const folder = getMediaFolder(payload.type)
-        mediaUrl = await StorageService.downloadAndUpload(payload.media, folder)
-        console.log('Media uploaded to storage:', mediaUrl)
+        const folder = getMediaFolder(messageType)
+        mediaUrl = await StorageService.downloadAndUpload(apiFileUrl, folder)
+        console.log('[WEBHOOK] Media uploaded to storage:', mediaUrl)
       } catch (error) {
-        console.error('Failed to process media:', error)
+        console.error('[WEBHOOK] Failed to process media:', error)
         // Continue without media if upload fails
       }
     }
 
     // Create message in database
-    const message = await MessageService.createMessage({
+    console.log('[WEBHOOK] Creating message...')
+    const savedMessage = await MessageService.createMessage({
       contactId: contact.id,
       conversationId: conversation.id,
       direction: 'inbound',
-      type: payload.type,
-      text: payload.text || undefined,
+      type: messageType,
+      text: message.text || undefined,
       mediaUrl,
-      apiFileUrl: payload.media || undefined,
+      apiFileUrl,
       status: 'delivered',
-      rawPayload: payload.raw || payload,
+      rawPayload: payload,
       client: adminClient,
     })
 
-    console.log('Message saved:', message.id)
+    console.log('[WEBHOOK] Message saved:', savedMessage.id)
 
     // TODO: Trigger real-time notification via Supabase Realtime
     // TODO: Check if should trigger AI response
 
     return NextResponse.json({
       success: true,
-      message_id: message.id,
+      message_id: savedMessage.id,
       conversation_id: conversation.id,
     })
   } catch (error: any) {

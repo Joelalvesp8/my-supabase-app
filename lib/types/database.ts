@@ -49,6 +49,37 @@ export interface Message {
   updated_at: string
 }
 
+// UAZAPI Webhook Types
+export interface UazapiWebhookPayload {
+  body: {
+    EventType: string
+    chat: {
+      wa_chatid: string
+      name?: string
+      wa_contactName?: string
+      phone?: string
+      [key: string]: any
+    }
+    message: {
+      chatid: string
+      sender: string
+      messageType: string
+      mediaType?: string
+      text?: string
+      fromMe: boolean
+      content?: {
+        URL?: string
+        [key: string]: any
+      }
+      [key: string]: any
+    }
+    instanceName: string
+    owner: string
+    token: string
+  }
+  [key: string]: any
+}
+
 export interface MessageEvent {
   id: string
   message_id: string
