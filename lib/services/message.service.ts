@@ -1,12 +1,13 @@
 import { createClient } from '@/lib/supabase/server'
 import { Contact, Conversation, Message, MessageDirection, MessageStatus, MessageType } from '@/lib/types/database'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 export class MessageService {
   /**
    * Find or create a contact by phone number
    */
-  static async findOrCreateContact(number: string, name?: string): Promise<Contact> {
-    const supabase = await createClient()
+  static async findOrCreateContact(number: string, name?: string, client?: SupabaseClient): Promise<Contact> {
+    const supabase = client || await createClient()
 
     // Try to find existing contact
     const { data: existingContact, error: findError } = await supabase
@@ -39,8 +40,8 @@ export class MessageService {
   /**
    * Find or create a conversation for a contact
    */
-  static async findOrCreateConversation(contactId: string): Promise<Conversation> {
-    const supabase = await createClient()
+  static async findOrCreateConversation(contactId: string, client?: SupabaseClient): Promise<Conversation> {
+    const supabase = client || await createClient()
 
     // Try to find existing open conversation
     const { data: existingConversation, error: findError } = await supabase
@@ -84,8 +85,9 @@ export class MessageService {
     apiFileUrl?: string
     status?: MessageStatus
     rawPayload?: any
+    client?: SupabaseClient
   }): Promise<Message> {
-    const supabase = await createClient()
+    const supabase = params.client || await createClient()
 
     const { data: message, error } = await supabase
       .from('messages')
@@ -122,9 +124,10 @@ export class MessageService {
   static async updateMessageStatus(
     messageId: string,
     status: MessageStatus,
-    rawPayload?: any
+    rawPayload?: any,
+    client?: SupabaseClient
   ): Promise<void> {
-    const supabase = await createClient()
+    const supabase = client || await createClient()
 
     // Update message
     const { error: updateError } = await supabase

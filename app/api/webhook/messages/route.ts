@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { MessageService } from '@/lib/services/message.service'
 import { StorageService } from '@/lib/services/storage.service'
 import { WebhookPayload, MessageType } from '@/lib/types/database'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 /**
  * Webhook endpoint to receive messages from UAZAPI
@@ -21,14 +22,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Create admin client for webhook operations (bypasses RLS)
+    const adminClient = createAdminClient()
+
     // Extract phone number (remove @s.whatsapp.net if present)
     const phoneNumber = payload.from.replace('@s.whatsapp.net', '')
 
     // Find or create contact
-    const contact = await MessageService.findOrCreateContact(phoneNumber)
+    const contact = await MessageService.findOrCreateContact(phoneNumber, undefined, adminClient)
 
     // Find or create conversation
-    const conversation = await MessageService.findOrCreateConversation(contact.id)
+    const conversation = await MessageService.findOrCreateConversation(contact.id, adminClient)
 
     // Process media if exists
     let mediaUrl: string | undefined
@@ -55,6 +59,7 @@ export async function POST(request: NextRequest) {
       apiFileUrl: payload.media || undefined,
       status: 'delivered',
       rawPayload: payload.raw || payload,
+      client: adminClient,
     })
 
     console.log('Message saved:', message.id)
@@ -94,11 +99,15 @@ export async function PUT(request: NextRequest) {
       )
     }
 
+    // Create admin client for webhook operations (bypasses RLS)
+    const adminClient = createAdminClient()
+
     // Update message status
     await MessageService.updateMessageStatus(
       payload.message_id,
       payload.status,
-      payload
+      payload,
+      adminClient
     )
 
     return NextResponse.json({ success: true })
