@@ -9,13 +9,17 @@ import { createAdminClient } from '@/lib/supabase/admin'
  * POST /api/webhook/messages
  */
 export async function POST(request: NextRequest) {
+  console.log('[WEBHOOK] Request received at:', new Date().toISOString())
+  console.log('[WEBHOOK] Headers:', Object.fromEntries(request.headers))
+
   try {
     const payload: WebhookPayload = await request.json()
 
-    console.log('Webhook received:', payload)
+    console.log('[WEBHOOK] Payload:', JSON.stringify(payload, null, 2))
 
     // Validate payload
     if (!payload.from || !payload.type) {
+      console.log('[WEBHOOK] Invalid payload - missing from or type')
       return NextResponse.json(
         { error: 'Invalid payload: missing required fields' },
         { status: 400 }
@@ -24,15 +28,21 @@ export async function POST(request: NextRequest) {
 
     // Create admin client for webhook operations (bypasses RLS)
     const adminClient = createAdminClient()
+    console.log('[WEBHOOK] Admin client created')
 
     // Extract phone number (remove @s.whatsapp.net if present)
     const phoneNumber = payload.from.replace('@s.whatsapp.net', '')
+    console.log('[WEBHOOK] Phone number:', phoneNumber)
 
     // Find or create contact
+    console.log('[WEBHOOK] Finding/creating contact...')
     const contact = await MessageService.findOrCreateContact(phoneNumber, undefined, adminClient)
+    console.log('[WEBHOOK] Contact:', contact.id)
 
     // Find or create conversation
+    console.log('[WEBHOOK] Finding/creating conversation...')
     const conversation = await MessageService.findOrCreateConversation(contact.id, adminClient)
+    console.log('[WEBHOOK] Conversation:', conversation.id)
 
     // Process media if exists
     let mediaUrl: string | undefined
