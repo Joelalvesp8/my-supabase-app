@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
       conversationId,
       direction: 'outbound',
       type,
-      text: text || null,
+      text: text || undefined,
       mediaUrl,
       apiFileUrl: mediaUrl,
       status: 'sent',
