@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     const conversation = await MessageService.findOrCreateConversation(contact.id)
 
     // Process media if exists
-    let mediaUrl: string | null = null
+    let mediaUrl: string | undefined
     if (payload.media && payload.type !== 'text') {
       try {
         // Download media from UAZAPI and upload to our storage
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
       direction: 'inbound',
       type: payload.type,
       text: payload.text || undefined,
-      mediaUrl: mediaUrl,
+      mediaUrl,
       apiFileUrl: payload.media || undefined,
       status: 'delivered',
       rawPayload: payload.raw || payload,
