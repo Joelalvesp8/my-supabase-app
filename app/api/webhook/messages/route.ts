@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
     console.log('[WEBHOOK] Phone number:', phoneNumber)
 
     // Get contact name
-    const contactName = chat.wa_contactName || chat.name || null
+    const contactName = chat.wa_contactName || chat.name || undefined
     console.log('[WEBHOOK] Contact name:', contactName)
 
     // Find or create contact
