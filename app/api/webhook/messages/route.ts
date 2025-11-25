@@ -50,9 +50,9 @@ export async function POST(request: NextRequest) {
       conversationId: conversation.id,
       direction: 'inbound',
       type: payload.type,
-      text: payload.text || null,
+      text: payload.text || undefined,
       mediaUrl: mediaUrl,
-      apiFileUrl: payload.media || null,
+      apiFileUrl: payload.media || undefined,
       status: 'delivered',
       rawPayload: payload.raw || payload,
     })
